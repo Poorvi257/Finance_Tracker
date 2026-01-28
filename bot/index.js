@@ -1,6 +1,7 @@
 const { Telegraf } = require('telegraf');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
+const http = require('http');
 require('dotenv').config();
 
 const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
@@ -42,3 +43,15 @@ bot.on('text', async (ctx) => {
 
 bot.launch();
 console.log("Bot is running...");
+
+// This creates a simple server to satisfy Render's health check
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is alive and running!\n');
+});
+
+// Render provides a PORT environment variable automatically
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Health check server listening on port ${PORT}`);
+});
