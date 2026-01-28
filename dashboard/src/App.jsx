@@ -4,8 +4,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 
 function App() {
   const [data, setData] = useState([]);
-  const SHEET_ID = "1xqiJYHkZL3u0nmzHKKr6YvvSlLtq2Y0r8AfKyhqSpQQ";
-  const GID = "0"; // Usually 0 for the first sheet
+  const SHEET_ID = import.meta.env.VITE_GOOGLE_SHEET_ID;
+  const GID = import.meta.env.VITE_GOOGLE_GID || "0";
 
   useEffect(() => {
     const fetchData = async () => {
