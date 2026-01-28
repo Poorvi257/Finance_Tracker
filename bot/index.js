@@ -21,6 +21,7 @@ bot.on('text', async (ctx) => {
   const parts = ctx.message.text.split(' ');
   const item = parts[0];
   const amount = parseFloat(parts[1]);
+  const category = parts[2] ? parts[2].charAt(0).toUpperCase() + parts[2].slice(1).toLowerCase() : 'Other';
 
   if (!item || isNaN(amount)) {
     return ctx.reply('⚠️ Use format: Item Amount (e.g., Pizza 12.50)');
@@ -32,12 +33,13 @@ bot.on('text', async (ctx) => {
     await sheet.addRow({
       Date: new Date().toISOString().split('T')[0],
       Item: item,
-      Amount: amount
+      Amount: amount,
+      Category: category
     });
-    ctx.reply(`✅ Logged: ${item} - $${amount}`);
+    ctx.reply(`✅ Logged in ${category}: ${item} ($${amount})`);
   } catch (e) {
-    console.error("FULL ERROR LOG:", e);
-    ctx.reply('❌ Error writing to sheet. Check permissions!');
+    console.error(e);
+    ctx.reply('❌ Failed to save.');
   }
 });
 
