@@ -79,6 +79,67 @@ bot.command('edit', async (ctx) => {
   }
 });
 
+bot.command('show', async (ctx) => {
+  const parts = ctx.message.text.split(' ');
+  
+  // Validate input: /show 20-01-2026 28-01-2026
+  if (parts.length < 3) {
+    return ctx.reply('⚠️ Usage: /show DD-MM-YYYY DD-MM-YYYY\nExample: /show 01-01-2026 31-01-2026');
+  }
+
+  const startStr = parts[1];
+  const endStr = parts[2];
+
+  // Helper to parse the user's DD-MM-YYYY input into a JS Date
+  const parseInput = (str) => {
+    const [d, m, y] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  const startDate = parseInput(startStr);
+  const endDate = parseInput(endStr);
+  endDate.setHours(23, 59, 59, 999); // Ensure it includes the whole end day
+
+  if (isNaN(startDate) || isNaN(endDate)) {
+    return ctx.reply('⚠️ Invalid format. Please use DD-MM-YYYY.');
+  }
+
+  try {
+    await doc.loadInfo();
+    const sheet = doc.sheetsByIndex[0];
+    const rows = await sheet.getRows();
+
+    // Filter rows based on the range
+    const filtered = rows.filter(row => {
+      // row.get('Date') will return the string saved by .toLocaleDateString()
+      const rowDate = new Date(row.get('Date'));
+      return rowDate >= startDate && rowDate <= endDate;
+    });
+
+    if (filtered.length === 0) {
+      return ctx.reply(`📭 No items found between ${startStr} and ${endStr}.`);
+    }
+
+    // Build the report string
+    let report = `📊 *Transactions: ${startStr} to ${endStr}*\n\n`;
+    let total = 0;
+
+    filtered.forEach(row => {
+      const amount = parseFloat(row.get('Amount'));
+      // Format each line: Date | Item: $Amount (Category)
+      report += `📅 ${row.get('Date')} | *${row.get('Item')}*: $${amount} _(${row.get('Category')})_\n`;
+      total += amount;
+    });
+
+    report += `\n💰 *Range Total: $${total.toFixed(2)}*`;
+
+    ctx.replyWithMarkdown(report);
+  } catch (e) {
+    console.error(e);
+    ctx.reply('❌ Error generating report. Ensure your sheet has Date, Item, Amount, and Category headers.');
+  }
+});
+
 bot.on('text', async (ctx) => {
   const parts = ctx.message.text.split(' ');
   const item = parts[0];
