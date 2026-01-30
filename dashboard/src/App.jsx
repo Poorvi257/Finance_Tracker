@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, PieChart as PieIcon, BarChart3, List, TrendingUp, ShoppingBag, Hash, Calendar } from 'lucide-react';
 
 // --- CONFIGURATION ---
-const API_BASE_URL = import.meta.env.RENDER_API_BASE_URL || "http://localhost:3000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // --- HELPER FUNCTIONS ---
 const getDynamicColor = (index, total) => {
