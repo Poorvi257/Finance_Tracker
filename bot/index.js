@@ -5,6 +5,9 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+// --- CONFIGURATION ---
+const TIMEZONE_OFFSET = 8; // UTC+8 (Singapore)
+
 // --- SETUP ---
 const app = express();
 app.use(cors());
@@ -20,21 +23,29 @@ const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, serviceAccountAut
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
 // --- HELPERS ---
-const getMonthSheetName = () => {
+
+// FIX: Singapore Time Helper
+const getLocalNow = () => {
   const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  return new Date(utc + (3600000 * TIMEZONE_OFFSET));
+};
+
+const getMonthSheetName = () => {
+  const now = getLocalNow();
   return `${now.toLocaleString('default', { month: 'long' })}_${now.getFullYear()}`;
 };
 
 const getTodayDate = () => {
-  const now = new Date();
+  const now = getLocalNow();
   const d = String(now.getDate()).padStart(2, '0');
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const y = now.getFullYear();
   return `${d}/${m}/${y}`; 
 };
 
+// FIX: Removed complex return type. Now returns simple boolean.
 const isValidDateInCurrentMonth = (d, m, y) => {
-  const now = new Date();
   const dateObj = new Date(y, m - 1, d);
   return dateObj.getFullYear() === y && dateObj.getMonth() === m - 1 && dateObj.getDate() === d;
 };
@@ -119,7 +130,7 @@ app.get('/api/status', async (req, res) => {
         const start = new Date(y1, m1 - 1, d1);
         const end = new Date(y2, m2 - 1, d2);
         
-        const now = new Date();
+        const now = getLocalNow(); // Uses SG Time
         const diffTime = end - now;
         const daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 1);
         const totalDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
@@ -154,7 +165,6 @@ app.get('/api/status', async (req, res) => {
         const nextDays = daysLeft > 1 ? daysLeft - 1 : 1; 
         const tomorrowLimit = remainingReal / nextDays;
 
-        // NEW: Calculate Safety Buffer (Potential - Static)
         const safetyBuffer = tomorrowLimit - staticCeiling;
 
         res.json({
@@ -168,7 +178,7 @@ app.get('/api/status', async (req, res) => {
                 spentToday,
                 leftToday,
                 tomorrow: tomorrowLimit,
-                safetyBuffer: safetyBuffer, // <--- Added this
+                safetyBuffer: safetyBuffer, 
                 isWarning: morningDynamicLimit < staticCeiling
             }
         });
@@ -176,7 +186,7 @@ app.get('/api/status', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// 3. Month List (THIS WAS MISSING!)
+// 3. Month List
 app.get('/api/months', async (req, res) => {
   try {
     await doc.loadInfo();
@@ -187,7 +197,7 @@ app.get('/api/months', async (req, res) => {
 
 // --- COMMANDS & LOGGING ---
 
-bot.start((ctx) => ctx.reply('💰 *FinancePulse V7 Ready*\n\n/budget Name Start End Amount\n/show - Full Dashboard\n/resync - Fix totals\n/report - Last 10 txns', { parse_mode: 'Markdown' }));
+bot.start((ctx) => ctx.reply('💰 *FinancePulse V7 Ready (Fixed)*\n\n/budget Name Start End Amount\n/show - Full Dashboard\n/resync - Fix totals\n/report - Last 10 txns', { parse_mode: 'Markdown' }));
 
 bot.command('clearbudget', async (ctx) => {
   try {
@@ -198,7 +208,9 @@ bot.command('clearbudget', async (ctx) => {
 });
 
 bot.command('budget', async (ctx) => {
-  const parts = ctx.message.text.split(' ');
+  // FIX: Use Regex split to handle multiple spaces safely
+  const parts = ctx.message.text.trim().split(/\s+/);
+  
   if (parts.length < 5) return ctx.reply('⚠️ Usage: /budget Name DD-MM-YYYY DD-MM-YYYY Amount');
   const name = parts[1];
   const startStr = parts[2];
@@ -208,8 +220,11 @@ bot.command('budget', async (ctx) => {
 
   const [d1, m1, y1] = startStr.split('-').map(Number);
   const [d2, m2, y2] = endStr.split('-').map(Number);
-  if (!isValidDateInCurrentMonth(d1, m1, y1).valid) return ctx.reply('❌ Invalid Start Date.');
-  if (!isValidDateInCurrentMonth(d2, m2, y2).valid) return ctx.reply('❌ Invalid End Date.');
+  
+  // FIX: Logic error removed. Directly check boolean.
+  if (!isValidDateInCurrentMonth(d1, m1, y1)) return ctx.reply(`❌ Invalid Start Date: ${startStr}`);
+  if (!isValidDateInCurrentMonth(d2, m2, y2)) return ctx.reply(`❌ Invalid End Date: ${endStr}`);
+  
   const startDate = new Date(y1, m1 - 1, d1);
   const endDate = new Date(y2, m2 - 1, d2);
   if (startDate > endDate) return ctx.reply('❌ Start date must be before End date.');
@@ -218,8 +233,12 @@ bot.command('budget', async (ctx) => {
     const sheet = await getBudgetSheet();
     await sheet.clearRows(); 
     await sheet.addRow({ Name: name, Start_Date: startStr, End_Date: endStr, Principal: amount, Fixed_Spent: 0, Variable_Spent: 0, Status: 'Active' });
-    const diffTime = endDate - startDate;
-    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
+    
+    // FIX: Set end time to end-of-day so 1-day budgets count as 1 day
+    const inclusiveEnd = new Date(y2, m2 - 1, d2, 23, 59, 59);
+    const diffTime = inclusiveEnd - startDate;
+    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    
     const daily = amount / totalDays;
     ctx.reply(`✅ *Budget Set: ${name}*\n💰 Principal: $${amount}\n📅 Duration: ${totalDays} days\n🛡️ *Initial Ceiling:* $${daily.toFixed(2)}`, { parse_mode: 'Markdown' });
   } catch (e) { console.error(e); ctx.reply('❌ System Error.'); }
@@ -279,7 +298,8 @@ bot.command('show', async (ctx) => {
         const [d2, m2, y2] = endDateStr.split('-').map(Number);
         const start = new Date(y1, m1 - 1, d1);
         const end = new Date(y2, m2 - 1, d2);
-        const now = new Date();
+        
+        const now = getLocalNow(); // Uses SG Time
         const diffTime = end - now;
         const daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 1);
         const totalDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
@@ -320,7 +340,9 @@ bot.command('report', async (ctx) => {
 
 bot.on('text', async (ctx) => {
   if (ctx.message.text.startsWith('/')) return;
+  // FIX: Handle double spaces
   const parts = ctx.message.text.trim().split(/\s+/);
+  
   let type = 'Variable';
   if (parts.length > 2 && parts[parts.length - 1].toLowerCase() === 'fixed') {
     type = 'Fixed'; parts.pop(); 
@@ -357,7 +379,8 @@ bot.on('text', async (ctx) => {
         const [d2, m2, y2] = endDateStr.split('-').map(Number);
         const start = new Date(y1, m1 - 1, d1);
         const end = new Date(y2, m2 - 1, d2);
-        const now = new Date();
+        
+        const now = getLocalNow(); // Uses SG Time
         const diffTime = end - now;
         const daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 1);
         const totalDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;

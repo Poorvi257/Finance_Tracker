@@ -2,10 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, CartesianGrid, Sector 
+  PieChart, Pie, Cell, Legend, CartesianGrid 
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, PieChart as PieIcon, BarChart3, List, TrendingUp, ShoppingBag, Hash, Calendar, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { 
+  Wallet, PieChart as PieIcon, BarChart3, List, TrendingUp, 
+  ShoppingBag, Hash, Calendar, ShieldCheck, AlertTriangle, PiggyBank 
+} from 'lucide-react';
 
 // --- CONFIGURATION ---
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
@@ -16,13 +19,20 @@ const getDynamicColor = (index, total) => {
   return `hsl(${h}, 70%, 60%)`;
 };
 
+// FIX: Robust Date Parser for DD/MM/YYYY format
+const parseDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const [d, m, y] = dateStr.split('/').map(Number);
+  return new Date(y, m - 1, d);
+};
+
 // --- COMPONENTS ---
 const StatCard = ({ icon: Icon, label, value, color }) => (
-  <motion.div whileHover={{ y: -5 }} style={statCardStyle}>
+  <motion.div whileHover={{ y: -5 }} style={{...statCardStyle, borderColor: color ? `${color}44` : '#334155'}}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
       <div>
         <p style={statLabel}>{label}</p>
-        <h2 style={statValue}>{value}</h2>
+        <h2 style={{...statValue, color: color || '#f8fafc'}}>{value}</h2>
       </div>
       <div style={{ padding: '0.5rem', backgroundColor: `${color}22`, borderRadius: '8px' }}>
         <Icon size={24} color={color} />
@@ -33,13 +43,11 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 
 // Gauge Component for Commander View
 const BudgetGauge = ({ limit, spent, left, isWarning }) => {
-  // Data for the half-pie chart
   const gaugeData = [
     { name: 'Spent', value: Math.min(spent, limit), color: isWarning ? '#ef4444' : '#3b82f6' },
     { name: 'Left', value: Math.max(0, left), color: '#334155' }
   ];
   
-  // If overspent, make it full red
   if (left < 0) {
     gaugeData[0] = { name: 'Overspent', value: 1, color: '#ef4444' };
     gaugeData[1] = { name: 'Left', value: 0, color: '#334155' };
@@ -68,7 +76,6 @@ const BudgetGauge = ({ limit, spent, left, isWarning }) => {
         </PieChart>
       </ResponsiveContainer>
       
-      {/* Center Text Overlay */}
       <div style={{ position: 'absolute', bottom: '20px', textAlign: 'center' }}>
         <div style={{ fontSize: '0.9rem', color: '#94a3b8', textTransform: 'uppercase' }}>Available Today</div>
         <div style={{ fontSize: '3.5rem', fontWeight: '800', color: left < 0 ? '#ef4444' : '#10b981' }}>
@@ -88,7 +95,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [availableMonths, setAvailableMonths] = useState([]);
   const [timeFilter, setTimeFilter] = useState('all');
-  const [mode, setMode] = useState('TRACKER'); // 'TRACKER' or 'COMMANDER'
+  const [mode, setMode] = useState('TRACKER'); 
   
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -110,13 +117,10 @@ function App() {
         setAvailableMonths(monthsRes.data || []);
         setBudget(statusRes.data);
 
-        // Auto-switch to Commander if active and first load
+        // Optional: Auto switch logic
         if (statusRes.data.active) {
-            // Optional: You can setMode('COMMANDER') here if you want it default
-        } else {
-            setMode('TRACKER');
-        }
-
+            // setMode('COMMANDER'); 
+        } 
       } catch (err) {
         console.error("Error fetching data:", err);
       }
@@ -125,21 +129,23 @@ function App() {
     fetchData();
   }, [currentMonth]);
 
-  // --- FILTER LOGIC (For Tracker View) ---
+  // --- FIX: UPDATED FILTER LOGIC ---
   const filteredRows = useMemo(() => {
     const now = new Date();
+    // Reset time for strictly date comparison
+    now.setHours(0,0,0,0);
+
     return data.filter(row => {
-      const rowDate = new Date(row.date);
-      if (isNaN(rowDate)) return true;
+      // Use helper to parse "DD/MM/YYYY" safely
+      const rowDate = parseDate(row.date);
+      rowDate.setHours(0,0,0,0);
 
       switch(timeFilter) {
         case 'daily':
-          // Fix timezone parsing issue by comparing locale strings
-          return rowDate.toLocaleDateString() === now.toLocaleDateString();
+          return rowDate.getTime() === now.getTime();
         case 'weekly':
           const startOfWeek = new Date(now);
-          startOfWeek.setDate(now.getDate() - now.getDay());
-          startOfWeek.setHours(0,0,0,0);
+          startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday start
           return rowDate >= startOfWeek;
         default: 
           return true;
@@ -147,7 +153,7 @@ function App() {
     });
   }, [data, timeFilter]);
 
-  // --- DYNAMIC STATS (For Tracker View) ---
+  // --- DYNAMIC STATS ---
   const { categoryData, topCategory, filteredTotal } = useMemo(() => {
     const total = filteredRows.reduce((sum, r) => sum + r.amount, 0);
 
@@ -203,7 +209,7 @@ function App() {
                     style={mode === 'COMMANDER' ? activeToggleStyle : toggleStyle}
                     onClick={() => setMode('COMMANDER')}
                   >
-                    Budget tracker
+                    Budget
                   </button>
                 </div>
               )}
@@ -333,8 +339,8 @@ function App() {
                />
 
                {budget.limits.isWarning && (
-                 <div style={{ marginTop: '0px', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', padding: '10px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertTriangle size={16} /> Debt Detected: Limit Reduced to recover.
+                 <div style={{ marginTop: '0px', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', padding: '10px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+                    <AlertTriangle size={16} /> Overspending Detected: Limit reduced.
                  </div>
                )}
             </div>
@@ -342,13 +348,16 @@ function App() {
             {/* INFO GRID */}
             <div style={statsGrid}>
               <StatCard icon={Calendar} label="Days Remaining" value={`${budget.daysLeft} Days`} color="#8b5cf6" />
-              {/* UPDATED MIDDLE CARD: SAFETY BUFFER */}
+              
+              {/* FIX: VARIABLE SAVINGS CARD */}
               <StatCard
-                icon={budget.limits.safetyBuffer >= 0 ? ShieldCheck : AlertTriangle}
-                label={budget.limits.safetyBuffer >= 0 ? "Safety Buffer" : "Daily Deficit"}
-                value={`${budget.limits.safetyBuffer >= 0 ? '+' : ''}$${budget.limits.safetyBuffer.toFixed(2)}/day`}
-                color={budget.limits.safetyBuffer >= 0 ? "#10b981" : "#ef4444"}
-              />              <StatCard icon={ShieldCheck} label="Real Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#10b981" />
+                icon={budget.limits.safetyBuffer > 0 ? PiggyBank : ShieldCheck}
+                label="Variable Savings"
+                value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`}
+                color={budget.limits.safetyBuffer > 0 ? "#10b981" : "#64748b"} 
+              />              
+              
+              <StatCard icon={ShieldCheck} label="Real Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#38bdf8" />
             </div>
 
             {/* BREAKDOWN BARS */}
@@ -399,7 +408,8 @@ function App() {
               </thead>
               <tbody>
                 <AnimatePresence>
-                  {data.slice().reverse().map((row, i) => ( // Use 'data' here to show all, regardless of tracker filter
+                  {/* FIX: Slice and Reverse to show newest first */}
+                  {data.slice().reverse().map((row, i) => (
                     <motion.tr 
                       key={i} 
                       initial={{ opacity: 0 }} 
