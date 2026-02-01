@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, CartesianGrid 
 } from 'recharts';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   Wallet, PieChart as PieIcon, BarChart3, List, TrendingUp, 
   ShoppingBag, Hash, Calendar, ShieldCheck, AlertTriangle, PiggyBank 
@@ -13,81 +13,91 @@ import {
 // --- CONFIGURATION ---
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-// --- HELPER FUNCTIONS ---
+// --- HELPERS ---
 const getDynamicColor = (index, total) => {
   const h = (index * (360 / Math.max(total, 1))) % 360;
   return `hsl(${h}, 70%, 60%)`;
 };
 
-// FIX: Robust Date Parser for DD/MM/YYYY format
 const parseDate = (dateStr) => {
   if (!dateStr) return new Date();
   const [d, m, y] = dateStr.split('/').map(Number);
   return new Date(y, m - 1, d);
 };
 
-// --- COMPONENTS ---
+// --- SUB-COMPONENTS ---
+
 const StatCard = ({ icon: Icon, label, value, color }) => (
-  <motion.div whileHover={{ y: -5 }} style={{...statCardStyle, borderColor: color ? `${color}44` : '#334155'}}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-      <div>
-        <p style={statLabel}>{label}</p>
-        <h2 style={{...statValue, color: color || '#f8fafc'}}>{value}</h2>
-      </div>
-      <div style={{ padding: '0.5rem', backgroundColor: `${color}22`, borderRadius: '8px' }}>
-        <Icon size={24} color={color} />
+  <motion.div 
+    whileHover={{ y: -5 }} 
+    className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm flex flex-col justify-between h-full"
+    style={{ borderColor: color ? `${color}44` : '#334155' }}
+  >
+    <div className="flex justify-between items-start mb-2">
+      <p className="text-slate-400 text-xs uppercase font-bold tracking-wider">{label}</p>
+      <div className="p-2 rounded-lg" style={{ backgroundColor: `${color}20` }}>
+        <Icon size={20} color={color} />
       </div>
     </div>
+    <h2 className="text-2xl lg:text-3xl font-extrabold text-white truncate">{value}</h2>
   </motion.div>
 );
 
-// Gauge Component for Commander View
+const BudgetProgressBar = ({ label, spent, total, colorClass, bgClass }) => {
+  const percentage = Math.min((spent / total) * 100, 100);
+  return (
+    <div>
+      <div className="flex justify-between mb-2 text-sm font-medium">
+        <span className="text-slate-300">{label}</span>
+        <span className="text-white">${spent.toFixed(2)}</span>
+      </div>
+      <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
+        <div 
+          className={`h-full rounded-full ${bgClass}`} 
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
 const BudgetGauge = ({ limit, spent, left, isWarning }) => {
-  const gaugeData = [
-    { name: 'Spent', value: Math.min(spent, limit), color: isWarning ? '#ef4444' : '#3b82f6' },
-    { name: 'Left', value: Math.max(0, left), color: '#334155' }
-  ];
-  
-  if (left < 0) {
-    gaugeData[0] = { name: 'Overspent', value: 1, color: '#ef4444' };
-    gaugeData[1] = { name: 'Left', value: 0, color: '#334155' };
-  }
+  const gaugeData = useMemo(() => {
+    if (left < 0) return [{ name: 'Overspent', value: 1, color: '#ef4444' }, { name: 'Left', value: 0, color: '#334155' }];
+    return [
+      { name: 'Spent', value: Math.min(spent, limit), color: isWarning ? '#ef4444' : '#3b82f6' },
+      { name: 'Left', value: Math.max(0, left), color: '#334155' }
+    ];
+  }, [limit, spent, left, isWarning]);
 
   return (
-    <div style={{ position: 'relative', height: '250px', width: '100%', display: 'flex', justifyContent: 'center' }}>
+    <div className="relative h-64 w-full flex justify-center items-center">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
-            data={gaugeData}
-            cx="50%"
-            cy="100%"
-            startAngle={180}
-            endAngle={0}
-            innerRadius={100}
-            outerRadius={140}
-            paddingAngle={2}
-            dataKey="value"
-            stroke="none"
+            data={gaugeData} cx="50%" cy="100%"
+            startAngle={180} endAngle={0}
+            innerRadius="75%" outerRadius="100%"
+            paddingAngle={2} dataKey="value" stroke="none"
           >
-            {gaugeData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
+            {gaugeData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
           </Pie>
         </PieChart>
       </ResponsiveContainer>
-      
-      <div style={{ position: 'absolute', bottom: '20px', textAlign: 'center' }}>
-        <div style={{ fontSize: '0.9rem', color: '#94a3b8', textTransform: 'uppercase' }}>Available Today</div>
-        <div style={{ fontSize: '3.5rem', fontWeight: '800', color: left < 0 ? '#ef4444' : '#10b981' }}>
+      <div className="absolute bottom-8 text-center w-full px-4">
+        <div className="text-xs text-slate-400 uppercase font-bold mb-1">Available Today</div>
+        <div className={`text-5xl lg:text-6xl font-extrabold ${left < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
           ${left.toFixed(2)}
         </div>
-        <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
-          Spent: <b>${spent.toFixed(2)}</b> / ${limit.toFixed(2)}
+        <div className="text-sm text-slate-400 mt-2">
+          Spent: <span className="text-white font-bold">${spent.toFixed(2)}</span> / ${limit.toFixed(2)}
         </div>
       </div>
     </div>
   );
 };
+
+// --- MAIN COMPONENT ---
 
 function App() {
   const [data, setData] = useState([]);
@@ -102,8 +112,8 @@ function App() {
     return `${now.toLocaleString('default', { month: 'long' })}_${now.getFullYear()}`;
   });
 
-  // --- FETCH DATA ---
   useEffect(() => {
+    let mounted = true;
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -112,326 +122,280 @@ function App() {
           axios.get(`${API_BASE_URL}/api/months`),
           axios.get(`${API_BASE_URL}/api/status`)
         ]);
-
-        setData(dataRes.data.data || []);
-        setAvailableMonths(monthsRes.data || []);
-        setBudget(statusRes.data);
-
-        // Optional: Auto switch logic
-        if (statusRes.data.active) {
-            // setMode('COMMANDER'); 
-        } 
-      } catch (err) {
-        console.error("Error fetching data:", err);
-      }
-      setLoading(false);
+        
+        if (mounted) {
+          setData(dataRes.data.data || []);
+          setAvailableMonths(monthsRes.data || []);
+          setBudget(statusRes.data);
+        }
+      } catch (err) { console.error("Error fetching data:", err); }
+      if (mounted) setLoading(false);
     };
     fetchData();
+    return () => { mounted = false; };
   }, [currentMonth]);
 
-  // --- FIX: UPDATED FILTER LOGIC ---
   const filteredRows = useMemo(() => {
-    const now = new Date();
-    // Reset time for strictly date comparison
-    now.setHours(0,0,0,0);
-
+    const now = new Date(); now.setHours(0,0,0,0);
     return data.filter(row => {
-      // Use helper to parse "DD/MM/YYYY" safely
-      const rowDate = parseDate(row.date);
-      rowDate.setHours(0,0,0,0);
-
+      const rowDate = parseDate(row.date); rowDate.setHours(0,0,0,0);
       switch(timeFilter) {
-        case 'daily':
-          return rowDate.getTime() === now.getTime();
+        case 'daily': return rowDate.getTime() === now.getTime();
         case 'weekly':
-          const startOfWeek = new Date(now);
-          startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday start
-          return rowDate >= startOfWeek;
-        default: 
-          return true;
+          const start = new Date(now); start.setDate(now.getDate() - now.getDay());
+          return rowDate >= start;
+        default: return true;
       }
     });
   }, [data, timeFilter]);
 
-  // --- DYNAMIC STATS ---
   const { categoryData, topCategory, filteredTotal } = useMemo(() => {
     const total = filteredRows.reduce((sum, r) => sum + r.amount, 0);
-
-    const totals = filteredRows.reduce((acc, curr) => {
-      acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
-      return acc;
+    const totals = filteredRows.reduce((acc, curr) => { 
+      acc[curr.category] = (acc[curr.category] || 0) + curr.amount; 
+      return acc; 
     }, {});
     
-    const catArray = Object.keys(totals).map((key) => ({
-      name: key,
-      value: totals[key]
-    }));
-
-    const top = catArray.length > 0 
-      ? [...catArray].sort((a, b) => b.value - a.value)[0].name 
-      : 'N/A';
-
+    const catArray = Object.keys(totals).map((key) => ({ name: key, value: totals[key] }));
+    const top = catArray.length > 0 ? [...catArray].sort((a, b) => b.value - a.value)[0].name : 'N/A';
     return { categoryData: catArray, topCategory: top, filteredTotal: total };
   }, [filteredRows]);
 
-  if (loading) return <div style={loaderStyle}>⚡ Syncing FinancePulse...</div>;
+  // Optimization: Prevent reversing the array on every render
+  const reversedData = useMemo(() => [...data].reverse(), [data]);
+
+  if (loading) return (
+    <div className="h-screen w-full flex justify-center items-center bg-slate-900 text-sky-400 font-bold text-xl animate-pulse">
+      ⚡ Syncing FinancePulse...
+    </div>
+  );
 
   return (
-    <div style={containerStyle}>
-      <div style={innerWrapper}>
+    <div className="min-h-screen bg-slate-900 text-slate-50 font-sans p-4 md:p-8">
+      <div className="w-full max-w-7xl mx-auto space-y-8">
         
-        {/* HEADER & CONTROLS */}
-        <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={headerStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-            
-            {/* Logo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <Wallet size={40} color="#38bdf8" />
+        {/* HEADER */}
+        <motion.header 
+          initial={{ opacity: 0, y: -20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
+        >
+            <div className="flex items-center gap-4">
+              <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <Wallet size={32} className="text-sky-400" />
+              </div>
               <div>
-                <h1 style={{ fontSize: '2rem', fontWeight: '800', margin: 0, lineHeight: 1 }}>FinancePulse</h1>
-                {budget?.active && <span style={{fontSize: '0.8rem', color: '#10b981', fontWeight: 'bold'}}>● BUDGET ACTIVE</span>}
+                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">FinancePulse</h1>
+                {budget?.active && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-xs text-emerald-500 font-bold tracking-widest uppercase">Budget Active</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Controls Right Side */}
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-              
-              {/* MODE TOGGLE */}
+            <div className="flex flex-wrap gap-3 items-center w-full md:w-auto">
               {budget?.active && (
-                <div style={toggleContainerStyle}>
-                  <button 
-                    style={mode === 'TRACKER' ? activeToggleStyle : toggleStyle}
-                    onClick={() => setMode('TRACKER')}
-                  >
-                    Tracker
-                  </button>
-                  <button 
-                    style={mode === 'COMMANDER' ? activeToggleStyle : toggleStyle}
-                    onClick={() => setMode('COMMANDER')}
-                  >
-                    Budget
-                  </button>
+                <div className="bg-slate-800 p-1 rounded-xl flex border border-slate-700 w-full md:w-auto">
+                  {['TRACKER', 'COMMANDER'].map(m => (
+                    <button 
+                      key={m}
+                      className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+                        mode === m ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                      }`}
+                      onClick={() => setMode(m)}
+                    >
+                      {m === 'TRACKER' ? 'Tracker' : 'Budget'}
+                    </button>
+                  ))}
                 </div>
               )}
 
-              {/* MONTH SELECTOR */}
-              <div style={dropdownWrapperStyle}>
-                <Calendar size={18} color="#94a3b8" />
+              <div className="flex items-center gap-2 bg-slate-800 px-4 py-2.5 rounded-xl border border-slate-700 w-full md:w-auto max-w-[200px] md:max-w-none">
+                <Calendar size={18} className="text-slate-400 shrink-0" />
                 <select 
                   value={currentMonth} 
                   onChange={(e) => setCurrentMonth(e.target.value)}
-                  style={selectStyle}
+                  className="bg-transparent text-white border-none outline-none cursor-pointer font-bold text-sm w-full md:w-auto appearance-none truncate"
                 >
-                  {!availableMonths.includes(currentMonth) && <option value={currentMonth}>{currentMonth.replace('_', ' ')}</option>}
+                  {!availableMonths.includes(currentMonth) && <option className="bg-slate-800" value={currentMonth}>{currentMonth.replace('_', ' ')}</option>}
                   {availableMonths.map(m => (
-                    <option key={m} value={m}>{m.replace('_', ' ')}</option>
+                    <option key={m} className="bg-slate-800" value={m}>{m.replace('_', ' ')}</option>
                   ))}
                 </select>
               </div>
             </div>
-          </div>
         </motion.header>
 
-        {/* =====================================================================================
-            VIEW 1: TRACKER MODE (Charts & Graphs) 
-           ===================================================================================== */}
+        {/* TRACKER VIEW */}
         {mode === 'TRACKER' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            {/* TIME FILTERS */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+            
+            {/* Filter Pills */}
+            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
               {['daily', 'weekly', 'all'].map(f => (
                 <button 
                   key={f}
                   onClick={() => setTimeFilter(f)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    backgroundColor: timeFilter === f ? '#38bdf8' : '#1e293b',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    textTransform: 'capitalize',
-                    fontWeight: 'bold',
-                    transition: '0.2s',
-                    fontSize: '0.9rem'
-                  }}
+                  className={`px-5 py-2 rounded-full text-sm font-bold capitalize transition-all whitespace-nowrap border ${
+                    timeFilter === f 
+                    ? 'bg-sky-500 border-sky-500 text-white shadow-lg shadow-sky-500/20' 
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'
+                  }`}
                 >
                   {f === 'all' ? 'Entire Month' : f}
                 </button>
               ))}
             </div>
 
-            {/* STATS RIBBON */}
-            <div style={statsGrid}>
-              <StatCard icon={TrendingUp} label={`${timeFilter === 'all' ? 'Month' : timeFilter} Total`} value={`$${filteredTotal.toLocaleString()}`} color="#10b981" />
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <StatCard icon={TrendingUp} label="Total Spend" value={`$${filteredTotal.toLocaleString()}`} color="#10b981" />
               <StatCard icon={ShoppingBag} label="Top Category" value={topCategory} color="#38bdf8" />
               <StatCard icon={Hash} label="Transactions" value={filteredRows.length} color="#f59e0b" />
             </div>
 
-            {/* CHARTS */}
-            <div style={chartsGrid}>
-              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} style={cardStyle}>
-                <div style={cardHeader}><BarChart3 size={18} /> Spending Trends</div>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={filteredRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                    <XAxis dataKey="item" stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <Tooltip 
-                      cursor={{fill: '#334155', opacity: 0.4}}
-                      contentStyle={tooltipContainerStyle}
-                      itemStyle={{ color: '#ffffff', fontWeight: 'bold' }} 
-                      labelStyle={{ color: '#cbd5e1' }}
-                    />
-                    <Bar dataKey="amount" fill="#38bdf8" radius={[4, 4, 0, 0]} animationDuration={800}>
-                      {filteredRows.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getDynamicColor(index, filteredRows.length)} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+            {/* Charts Grid */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
+                  <BarChart3 size={16} /> Spending Trends
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={filteredRows}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="item" stroke="#94a3b8" tick={{fontSize: 12}} dy={10} />
+                      <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
+                      <Tooltip 
+                        cursor={{fill: '#334155', opacity: 0.4}}
+                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#38bdf8', borderRadius: '8px', color: '#fff' }}
+                        itemStyle={{ color: '#ffffff', fontWeight: 'bold' }} 
+                      />
+                      <Bar dataKey="amount" fill="#38bdf8" radius={[4, 4, 0, 0]}>
+                        {filteredRows.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={getDynamicColor(index, filteredRows.length)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </motion.div>
 
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} style={cardStyle}>
-                <div style={cardHeader}><PieIcon size={18} /> Category Split</div>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie 
-                      data={categoryData} 
-                      dataKey="value" 
-                      nameKey="name" 
-                      cx="50%" cy="50%" 
-                      innerRadius={60} 
-                      outerRadius={80} 
-                      paddingAngle={2}
-                    >
-                      {categoryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getDynamicColor(index, categoryData.length)} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={tooltipContainerStyle} itemStyle={{ color: '#ffffff' }} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
+                   <PieIcon size={16} /> Category Split
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie 
+                        data={categoryData} dataKey="value" nameKey="name" cx="50%" cy="50%" 
+                        innerRadius={60} outerRadius={80}
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={getDynamicColor(index, categoryData.length)} stroke="#1e293b" strokeWidth={2} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#38bdf8', borderRadius: '8px', color: '#fff' }} itemStyle={{ color: '#ffffff' }} />
+                      <Legend verticalAlign="bottom" height={36}/>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </motion.div>
             </div>
           </motion.div>
         )}
 
-        {/* =====================================================================================
-            VIEW 2: COMMANDER MODE (Budget Dashboard) 
-           ===================================================================================== */}
+        {/* COMMANDER VIEW */}
         {mode === 'COMMANDER' && budget && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
             
-            {/* HERO GAUGE */}
-            <div style={{...cardStyle, textAlign: 'center', marginBottom: '20px', border: budget.limits.leftToday < 0 ? '1px solid #ef4444' : '1px solid #10b981'}}>
-               <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
-                  <span style={statLabel}>DAILY CAP</span>
-                  <span style={{color: '#94a3b8', fontWeight: 'bold'}}>${budget.limits.daily.toFixed(2)}</span>
+            {/* Hero Gauge */}
+            <div className={`bg-slate-800 rounded-2xl p-6 border shadow-sm text-center relative ${budget.limits.leftToday < 0 ? 'border-red-500/50' : 'border-emerald-500/50'}`}>
+               <div className="flex justify-between items-center mb-4">
+                  <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">Daily Cap</span>
+                  <span className="text-white font-mono font-bold bg-slate-700/50 px-2 py-1 rounded text-sm">${budget.limits.daily.toFixed(2)}</span>
                </div>
-               
-               <BudgetGauge 
-                  limit={budget.limits.daily} 
-                  spent={budget.limits.spentToday} 
-                  left={budget.limits.leftToday}
-                  isWarning={budget.limits.isWarning}
-               />
-
+               <BudgetGauge limit={budget.limits.daily} spent={budget.limits.spentToday} left={budget.limits.leftToday} isWarning={budget.limits.isWarning} />
                {budget.limits.isWarning && (
-                 <div style={{ marginTop: '0px', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', padding: '10px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
-                    <AlertTriangle size={16} /> Overspending Detected: Limit reduced.
+                 <div className="mt-4 bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl inline-flex items-center gap-3 text-sm font-semibold max-w-md mx-auto">
+                    <AlertTriangle size={18} /> <span>Overspending Detected: Limit reduced.</span>
                  </div>
                )}
             </div>
 
-            {/* INFO GRID */}
-            <div style={statsGrid}>
+            {/* Info Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               <StatCard icon={Calendar} label="Days Remaining" value={`${budget.daysLeft} Days`} color="#8b5cf6" />
-              
-              {/* FIX: VARIABLE SAVINGS CARD */}
-              <StatCard
-                icon={budget.limits.safetyBuffer > 0 ? PiggyBank : ShieldCheck}
-                label="Variable Savings"
-                value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`}
-                color={budget.limits.safetyBuffer > 0 ? "#10b981" : "#64748b"} 
-              />              
-              
+              <StatCard icon={budget.limits.safetyBuffer > 0 ? PiggyBank : ShieldCheck} label="Variable Savings" value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`} color={budget.limits.safetyBuffer > 0 ? "#10b981" : "#64748b"} />
               <StatCard icon={ShieldCheck} label="Real Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#38bdf8" />
             </div>
 
-            {/* BREAKDOWN BARS */}
-            <div style={cardStyle}>
-               <div style={cardHeader}>Budget Breakdown</div>
-               
-               {/* Principal Bar */}
-               <div style={{marginBottom: '15px'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.9rem'}}>
-                    <span>Fixed Costs (Rent/Bills)</span>
-                    <span>${budget.fixedSpent.toFixed(2)}</span>
-                  </div>
-                  <div style={{width: '100%', height: '8px', background: '#334155', borderRadius: '4px'}}>
-                    <div style={{width: `${Math.min((budget.fixedSpent/budget.principal)*100, 100)}%`, height: '100%', background: '#3b82f6', borderRadius: '4px'}}></div>
-                  </div>
-               </div>
-
-               {/* Variable Bar */}
-               <div>
-                  <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.9rem'}}>
-                    <span>Variable Spend (Fun)</span>
-                    <span>${budget.varSpent.toFixed(2)}</span>
-                  </div>
-                  <div style={{width: '100%', height: '8px', background: '#334155', borderRadius: '4px'}}>
-                    <div style={{width: `${Math.min((budget.varSpent/budget.principal)*100, 100)}%`, height: '100%', background: '#10b981', borderRadius: '4px'}}></div>
-                  </div>
+            {/* Breakdown Bars - OPTIMIZED: Uses Component */}
+            <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm">
+               <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">Budget Breakdown</div>
+               <div className="space-y-6">
+                 <BudgetProgressBar 
+                   label="Fixed Costs (Rent/Bills)" 
+                   spent={budget.fixedSpent} 
+                   total={budget.principal} 
+                   bgClass="bg-blue-500" 
+                 />
+                 <BudgetProgressBar 
+                   label="Variable Spend (Fun)" 
+                   spent={budget.varSpent} 
+                   total={budget.principal} 
+                   bgClass="bg-emerald-500" 
+                 />
                </div>
             </div>
-
           </motion.div>
         )}
 
-
-        {/* =====================================================================================
-            SHARED: TABLE SECTION 
-           ===================================================================================== */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ ...cardStyle, marginTop: '2rem' }}>
-          <div style={cardHeader}><List size={18} /> Detailed Log</div>
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8', fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                  <th style={{ padding: '12px' }}>Date</th>
-                  <th style={{ padding: '12px' }}>Item</th>
-                  <th style={{ padding: '12px' }}>Category</th>
-                  <th style={{ padding: '12px' }}>Amount</th>
+        {/* DATA TABLE */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden"
+        >
+          <div className="p-6 border-b border-slate-700 flex items-center gap-2">
+            <List size={18} className="text-slate-400" />
+            <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">Detailed Log</span>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[600px]">
+              <thead className="bg-slate-900/50">
+                <tr className="text-slate-400 text-xs uppercase font-bold tracking-wider">
+                  <th className="p-4 pl-6">Date</th>
+                  <th className="p-4">Item</th>
+                  <th className="p-4">Category</th>
+                  <th className="p-4 pr-6 text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody>
-                <AnimatePresence>
-                  {/* FIX: Slice and Reverse to show newest first */}
-                  {data.slice().reverse().map((row, i) => (
-                    <motion.tr 
-                      key={i} 
-                      initial={{ opacity: 0 }} 
-                      animate={{ opacity: 1 }}
-                      style={{ borderBottom: '1px solid #1e293b' }}
-                    >
-                      <td style={{ padding: '12px', fontSize: '0.9rem', color: '#cbd5e1' }}>{row.date}</td>
-                      <td style={{ padding: '12px', fontWeight: '500' }}>{row.item}</td>
-                      <td style={{ padding: '12px', color: '#38bdf8', fontSize: '0.9rem' }}>{row.category}</td>
-                      <td style={{ padding: '12px', fontWeight: 'bold' }}>
-                        <span style={{ 
-                          color: row.type === 'Fixed' ? '#8b5cf6' : '#f8fafc',
-                          background: row.type === 'Fixed' ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
-                          padding: '2px 8px',
-                          borderRadius: '4px'
-                        }}>
-                          ${row.amount}
-                        </span>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
+              <tbody className="divide-y divide-slate-700/50">
+                {reversedData.map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                    <td className="p-4 pl-6 text-sm text-slate-400 font-mono">{row.date}</td>
+                    <td className="p-4 font-medium text-slate-200">{row.item}</td>
+                    <td className="p-4">
+                      <span className="bg-sky-500/10 text-sky-400 px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide">
+                        {row.category}
+                      </span>
+                    </td>
+                    <td className="p-4 pr-6 text-right">
+                      <span className={`font-bold font-mono ${row.type === 'Fixed' ? 'text-purple-400' : 'text-slate-50'}`}>
+                        ${row.amount.toFixed(2)}
+                      </span>
+                      {row.type === 'Fixed' && <span className="ml-2 text-[10px] text-purple-400/70 uppercase">Fixed</span>}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -441,26 +405,5 @@ function App() {
     </div>
   );
 }
-
-// --- STYLES ---
-const containerStyle = { backgroundColor: '#0f172a', color: '#f8fafc', minHeight: '100vh', width: '100vw', margin: 0, padding: '40px 0', boxSizing: 'border-box' };
-const innerWrapper = { maxWidth: '1400px', margin: '0 auto', padding: '0 20px' };
-const headerStyle = { marginBottom: '40px' };
-const statsGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '30px' };
-const chartsGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '20px' };
-const cardStyle = { background: '#1e293b', borderRadius: '16px', padding: '24px', border: '1px solid #334155', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' };
-const cardHeader = { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', color: '#94a3b8', fontWeight: '600' };
-const statCardStyle = { background: '#1e293b', padding: '24px', borderRadius: '16px', border: '1px solid #334155' };
-const statLabel = { color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', margin: '0 0 5px 0' };
-const statValue = { fontSize: '2rem', fontWeight: '800', margin: 0 };
-const loaderStyle = { height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#0f172a', color: '#38bdf8' };
-const dropdownWrapperStyle = { display: 'flex', alignItems: 'center', gap: '10px', background: '#1e293b', padding: '8px 15px', borderRadius: '12px', border: '1px solid #334155' };
-const selectStyle = { background: 'transparent', color: '#fff', border: 'none', outline: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' };
-const tooltipContainerStyle = { backgroundColor: '#0f172a', border: '1px solid #38bdf8', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)', padding: '10px', color: '#ffffff' };
-
-// Toggle Button Styles
-const toggleContainerStyle = { background: '#1e293b', padding: '4px', borderRadius: '12px', display: 'flex', border: '1px solid #334155' };
-const toggleStyle = { background: 'transparent', border: 'none', color: '#94a3b8', padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', transition: '0.2s' };
-const activeToggleStyle = { ...toggleStyle, background: '#38bdf8', color: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' };
 
 export default App;
