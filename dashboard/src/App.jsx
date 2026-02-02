@@ -8,11 +8,12 @@ import { motion } from 'framer-motion';
 import { 
   Wallet, BarChart3, List, TrendingUp, ShoppingBag, 
   Hash, Calendar, ShieldCheck, AlertTriangle, PiggyBank,
-  Activity
+  Activity, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+const ROWS_PER_PAGE = 10;
 
 // --- HELPERS ---
 const getDynamicColor = (index, total) => {
@@ -107,11 +108,17 @@ function App() {
   const [availableMonths, setAvailableMonths] = useState([]);
   const [timeFilter, setTimeFilter] = useState('all');
   const [mode, setMode] = useState('TRACKER'); 
+  const [currentPage, setCurrentPage] = useState(1);
   
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return `${now.toLocaleString('default', { month: 'long' })}_${now.getFullYear()}`;
   });
+
+  // Reset pagination when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [timeFilter]);
 
   useEffect(() => {
     let mounted = true;
@@ -128,6 +135,7 @@ function App() {
           setData(dataRes.data.data || []);
           setAvailableMonths(monthsRes.data || []);
           setBudget(statusRes.data);
+          setCurrentPage(1);
         }
       } catch (err) { console.error("Error fetching data:", err); }
       if (mounted) setLoading(false);
@@ -150,7 +158,6 @@ function App() {
     });
   }, [data, timeFilter]);
 
-  // Data for Chart 1: Category Bar Chart
   const { categoryData, topCategory, filteredTotal } = useMemo(() => {
     const total = filteredRows.reduce((sum, r) => sum + r.amount, 0);
     const totals = filteredRows.reduce((acc, curr) => { 
@@ -166,29 +173,32 @@ function App() {
     return { categoryData: catArray, topCategory: top, filteredTotal: total };
   }, [filteredRows]);
 
-  // Data for Chart 2: Daily Activity Trend (Area Chart) - VARIABLE ONLY
   const dailyTrendData = useMemo(() => {
     const days = {};
     filteredRows.forEach(row => {
-        // EXCLUSION LOGIC: Skip Fixed costs for the daily trend chart
         if (row.type === 'Fixed') return;
-
-        // Group by Date string directly to preserve day info
-        const dateKey = row.date.substring(0, 5); // "DD/MM" format for cleaner X-Axis
+        const dateKey = row.date.substring(0, 5); 
         days[dateKey] = (days[dateKey] || 0) + row.amount;
     });
 
-    // Convert to array and sort by Date object to ensure chronological order
     return Object.keys(days)
         .map(dateStr => ({ 
             name: dateStr, 
             value: days[dateStr].toFixed(2),
-            fullDate: parseDate(`${dateStr}/${new Date().getFullYear()}`) // Helper for sorting
+            fullDate: parseDate(`${dateStr}/${new Date().getFullYear()}`) 
         }))
         .sort((a, b) => a.fullDate - b.fullDate);
   }, [filteredRows]);
 
-  const reversedData = useMemo(() => [...data].reverse(), [data]);
+  // Use the filtered results for the log table and reverse chronological order
+  const reversedFilteredData = useMemo(() => [...filteredRows].reverse(), [filteredRows]);
+
+  // Pagination Logic
+  const totalPages = Math.ceil(reversedFilteredData.length / ROWS_PER_PAGE);
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * ROWS_PER_PAGE;
+    return reversedFilteredData.slice(start, start + ROWS_PER_PAGE);
+  }, [reversedFilteredData, currentPage]);
 
   if (loading) return (
     <div className="h-screen w-full flex justify-center items-center bg-slate-900 text-sky-400 font-bold text-xl animate-pulse">
@@ -260,8 +270,6 @@ function App() {
         {/* TRACKER VIEW */}
         {mode === 'TRACKER' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
-            
-            {/* Filter Pills */}
             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
               {['daily', 'weekly', 'all'].map(f => (
                 <button 
@@ -278,17 +286,13 @@ function App() {
               ))}
             </div>
 
-            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               <StatCard icon={TrendingUp} label="Total Spend" value={`$${filteredTotal.toLocaleString()}`} color="#10b981" />
               <StatCard icon={ShoppingBag} label="Top Category" value={topCategory} color="#38bdf8" />
               <StatCard icon={Hash} label="Transactions" value={filteredRows.length} color="#f59e0b" />
             </div>
 
-            {/* Charts Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              
-              {/* CHART 1: SPENDING BY CATEGORY (Bar Chart) */}
               <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
                   <BarChart3 size={16} /> Spending by Category
@@ -314,7 +318,6 @@ function App() {
                 </div>
               </motion.div>
 
-              {/* CHART 2: DAILY ACTIVITY TREND (Area Chart) - VARIABLE ONLY */}
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
                    <Activity size={16} /> Daily Activity
@@ -354,8 +357,6 @@ function App() {
         {/* COMMANDER VIEW */}
         {mode === 'COMMANDER' && budget && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
-            
-            {/* Hero Gauge */}
             <div className={`bg-slate-800 rounded-2xl p-6 border shadow-sm text-center relative ${budget.limits.leftToday < 0 ? 'border-red-500/50' : 'border-emerald-500/50'}`}>
                <div className="flex justify-between items-center mb-4">
                   <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">Daily Cap</span>
@@ -369,51 +370,38 @@ function App() {
                )}
             </div>
 
-            {/* Info Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               <StatCard icon={Calendar} label="Days Remaining" value={`${budget.daysLeft} Days`} color="#8b5cf6" />
-              
-              {/* UPDATED: Piggy Bank Card */}
-              <StatCard 
-                icon={PiggyBank} 
-                label="Piggy Bank (Saved)" 
-                value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`} 
-                color="#f59e0b" // Gold/Amber color for Piggy Bank
-              />
-              
+              <StatCard icon={PiggyBank} label="Piggy Bank (Saved)" value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`} color="#f59e0b" />
               <StatCard icon={ShieldCheck} label="Real Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#38bdf8" />
             </div>
 
-            {/* Breakdown Bars */}
             <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm">
                <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">Budget Breakdown</div>
                <div className="space-y-6">
-                 <BudgetProgressBar 
-                   label="Fixed Costs (Rent/Bills)" 
-                   spent={budget.fixedSpent} 
-                   total={budget.principal} 
-                   bgClass="bg-blue-500" 
-                 />
-                 <BudgetProgressBar 
-                   label="Variable Spend (Fun)" 
-                   spent={budget.varSpent} 
-                   total={budget.principal} 
-                   bgClass="bg-emerald-500" 
-                 />
+                 <BudgetProgressBar label="Fixed Costs (Rent/Bills)" spent={budget.fixedSpent} total={budget.principal} bgClass="bg-blue-500" />
+                 <BudgetProgressBar label="Variable Spend (Fun)" spent={budget.varSpent} total={budget.principal} bgClass="bg-emerald-500" />
                </div>
             </div>
           </motion.div>
         )}
 
         {/* DATA TABLE */}
-        <motion.div 
+        {mode === 'TRACKER' && <motion.div 
           initial={{ opacity: 0, y: 20 }} 
           animate={{ opacity: 1, y: 0 }} 
           className="bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden"
         >
-          <div className="p-6 border-b border-slate-700 flex items-center gap-2">
-            <List size={18} className="text-slate-400" />
-            <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">Detailed Log</span>
+          <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <List size={18} className="text-slate-400" />
+              <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">
+                Detailed Log {timeFilter !== 'all' && `(${timeFilter})`}
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 font-medium">
+              Page {currentPage} of {totalPages || 1}
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -427,28 +415,61 @@ function App() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {reversedData.map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-700/30 transition-colors">
-                    <td className="p-4 pl-6 text-sm text-slate-400 font-mono">{row.date}</td>
-                    <td className="p-4 font-medium text-slate-200">{row.item}</td>
-                    <td className="p-4">
-                      <span className="bg-sky-500/10 text-sky-400 px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide">
-                        {row.category}
-                      </span>
-                    </td>
-                    <td className="p-4 pr-6 text-right">
-                      <span className={`font-bold font-mono ${row.type === 'Fixed' ? 'text-purple-400' : 'text-slate-50'}`}>
-                        ${row.amount.toFixed(2)}
-                      </span>
-                      {row.type === 'Fixed' && <span className="ml-2 text-[10px] text-purple-400/70 uppercase">Fixed</span>}
+                {paginatedData.length > 0 ? (
+                  paginatedData.map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                      <td className="p-4 pl-6 text-sm text-slate-400 font-mono">{row.date}</td>
+                      <td className="p-4 font-medium text-slate-200">{row.item}</td>
+                      <td className="p-4">
+                        <span className="bg-sky-500/10 text-sky-400 px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide">
+                          {row.category}
+                        </span>
+                      </td>
+                      <td className="p-4 pr-6 text-right">
+                        <span className={`font-bold font-mono ${row.type === 'Fixed' ? 'text-purple-400' : 'text-slate-50'}`}>
+                          ${row.amount.toFixed(2)}
+                        </span>
+                        {row.type === 'Fixed' && <span className="ml-2 text-[10px] text-purple-400/70 uppercase">Fixed</span>}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="p-12 text-center text-slate-500 font-medium italic">
+                      No logs found for this period.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
-        </motion.div>
 
+          {/* Pagination Controls */}
+          {reversedFilteredData.length > 0 && (
+            <div className="p-4 bg-slate-900/30 border-t border-slate-700 flex items-center justify-between">
+              <p className="text-sm text-slate-400">
+                Showing <span className="text-white">{(currentPage - 1) * ROWS_PER_PAGE + 1}</span> to <span className="text-white">{Math.min(currentPage * ROWS_PER_PAGE, reversedFilteredData.length)}</span> of <span className="text-white">{reversedFilteredData.length}</span>
+              </p>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-30 transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="p-2 rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-30 transition-colors"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      }
       </div>
     </div>
   );
