@@ -372,7 +372,15 @@ function App() {
             {/* Info Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               <StatCard icon={Calendar} label="Days Remaining" value={`${budget.daysLeft} Days`} color="#8b5cf6" />
-              <StatCard icon={budget.limits.safetyBuffer > 0 ? PiggyBank : ShieldCheck} label="Variable Savings" value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`} color={budget.limits.safetyBuffer > 0 ? "#10b981" : "#64748b"} />
+              
+              {/* UPDATED: Piggy Bank Card */}
+              <StatCard 
+                icon={PiggyBank} 
+                label="Piggy Bank (Saved)" 
+                value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`} 
+                color="#f59e0b" // Gold/Amber color for Piggy Bank
+              />
+              
               <StatCard icon={ShieldCheck} label="Real Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#38bdf8" />
             </div>
 
