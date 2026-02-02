@@ -166,12 +166,14 @@ function App() {
     return { categoryData: catArray, topCategory: top, filteredTotal: total };
   }, [filteredRows]);
 
-  // Data for Chart 2: Daily Activity Trend (Area Chart)
+  // Data for Chart 2: Daily Activity Trend (Area Chart) - VARIABLE ONLY
   const dailyTrendData = useMemo(() => {
     const days = {};
     filteredRows.forEach(row => {
+        // EXCLUSION LOGIC: Skip Fixed costs for the daily trend chart
+        if (row.type === 'Fixed') return;
+
         // Group by Date string directly to preserve day info
-        // Note: filteredRows is already filtered by the timeFilter, so this just aggregates the view
         const dateKey = row.date.substring(0, 5); // "DD/MM" format for cleaner X-Axis
         days[dateKey] = (days[dateKey] || 0) + row.amount;
     });
@@ -312,7 +314,7 @@ function App() {
                 </div>
               </motion.div>
 
-              {/* CHART 2: DAILY ACTIVITY TREND (Area Chart) */}
+              {/* CHART 2: DAILY ACTIVITY TREND (Area Chart) - VARIABLE ONLY */}
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
                    <Activity size={16} /> Daily Activity
