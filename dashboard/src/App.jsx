@@ -2,12 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, CartesianGrid 
+  AreaChart, Area, CartesianGrid, PieChart, Pie, Cell 
 } from 'recharts';
 import { motion } from 'framer-motion';
 import { 
-  Wallet, PieChart as PieIcon, BarChart3, List, TrendingUp, 
-  ShoppingBag, Hash, Calendar, ShieldCheck, AlertTriangle, PiggyBank 
+  Wallet, BarChart3, List, TrendingUp, ShoppingBag, 
+  Hash, Calendar, ShieldCheck, AlertTriangle, PiggyBank,
+  Activity
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -43,7 +44,7 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
   </motion.div>
 );
 
-const BudgetProgressBar = ({ label, spent, total, colorClass, bgClass }) => {
+const BudgetProgressBar = ({ label, spent, total, bgClass }) => {
   const percentage = Math.min((spent / total) * 100, 100);
   return (
     <div>
@@ -86,7 +87,7 @@ const BudgetGauge = ({ limit, spent, left, isWarning }) => {
       </ResponsiveContainer>
       <div className="absolute bottom-8 text-center w-full px-4">
         <div className="text-xs text-slate-400 uppercase font-bold mb-1">Available Today</div>
-        <div className={`text-5xl lg:text-6xl font-extrabold ${left < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+        <div className={`text-4xl lg:text-5xl font-extrabold ${left < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
           ${left.toFixed(2)}
         </div>
         <div className="text-sm text-slate-400 mt-2">
@@ -149,6 +150,7 @@ function App() {
     });
   }, [data, timeFilter]);
 
+  // Data for Chart 1: Category Bar Chart
   const { categoryData, topCategory, filteredTotal } = useMemo(() => {
     const total = filteredRows.reduce((sum, r) => sum + r.amount, 0);
     const totals = filteredRows.reduce((acc, curr) => { 
@@ -156,12 +158,34 @@ function App() {
       return acc; 
     }, {});
     
-    const catArray = Object.keys(totals).map((key) => ({ name: key, value: totals[key] }));
-    const top = catArray.length > 0 ? [...catArray].sort((a, b) => b.value - a.value)[0].name : 'N/A';
+    const catArray = Object.keys(totals)
+      .map((key) => ({ name: key, value: totals[key] }))
+      .sort((a, b) => b.value - a.value);
+
+    const top = catArray.length > 0 ? catArray[0].name : 'N/A';
     return { categoryData: catArray, topCategory: top, filteredTotal: total };
   }, [filteredRows]);
 
-  // Optimization: Prevent reversing the array on every render
+  // Data for Chart 2: Daily Activity Trend (Area Chart)
+  const dailyTrendData = useMemo(() => {
+    const days = {};
+    filteredRows.forEach(row => {
+        // Group by Date string directly to preserve day info
+        // Note: filteredRows is already filtered by the timeFilter, so this just aggregates the view
+        const dateKey = row.date.substring(0, 5); // "DD/MM" format for cleaner X-Axis
+        days[dateKey] = (days[dateKey] || 0) + row.amount;
+    });
+
+    // Convert to array and sort by Date object to ensure chronological order
+    return Object.keys(days)
+        .map(dateStr => ({ 
+            name: dateStr, 
+            value: days[dateStr],
+            fullDate: parseDate(`${dateStr}/${new Date().getFullYear()}`) // Helper for sorting
+        }))
+        .sort((a, b) => a.fullDate - b.fullDate);
+  }, [filteredRows]);
+
   const reversedData = useMemo(() => [...data].reverse(), [data]);
 
   if (loading) return (
@@ -261,24 +285,26 @@ function App() {
 
             {/* Charts Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              
+              {/* CHART 1: SPENDING BY CATEGORY (Bar Chart) */}
               <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
-                  <BarChart3 size={16} /> Spending Trends
+                  <BarChart3 size={16} /> Spending by Category
                 </div>
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={filteredRows}>
+                    <BarChart data={categoryData} layout="horizontal">
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                      <XAxis dataKey="item" stroke="#94a3b8" tick={{fontSize: 12}} dy={10} />
+                      <XAxis dataKey="name" stroke="#94a3b8" tick={{fontSize: 12}} dy={10} />
                       <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
                       <Tooltip 
                         cursor={{fill: '#334155', opacity: 0.4}}
                         contentStyle={{ backgroundColor: '#0f172a', borderColor: '#38bdf8', borderRadius: '8px', color: '#fff' }}
                         itemStyle={{ color: '#ffffff', fontWeight: 'bold' }} 
                       />
-                      <Bar dataKey="amount" fill="#38bdf8" radius={[4, 4, 0, 0]}>
-                        {filteredRows.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={getDynamicColor(index, filteredRows.length)} />
+                      <Bar dataKey="value" fill="#38bdf8" radius={[4, 4, 0, 0]}>
+                        {categoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={getDynamicColor(index, categoryData.length)} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -286,24 +312,36 @@ function App() {
                 </div>
               </motion.div>
 
+              {/* CHART 2: DAILY ACTIVITY TREND (Area Chart) */}
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
-                   <PieIcon size={16} /> Category Split
+                   <Activity size={16} /> Daily Activity
                 </div>
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie 
-                        data={categoryData} dataKey="value" nameKey="name" cx="50%" cy="50%" 
-                        innerRadius={60} outerRadius={80}
-                      >
-                        {categoryData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={getDynamicColor(index, categoryData.length)} stroke="#1e293b" strokeWidth={2} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#38bdf8', borderRadius: '8px', color: '#fff' }} itemStyle={{ color: '#ffffff' }} />
-                      <Legend verticalAlign="bottom" height={36}/>
-                    </PieChart>
+                    <AreaChart data={dailyTrendData}>
+                      <defs>
+                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="name" stroke="#94a3b8" tick={{fontSize: 12}} dy={10} />
+                      <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#10b981', borderRadius: '8px', color: '#fff' }} 
+                        itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="value" 
+                        stroke="#10b981" 
+                        strokeWidth={3}
+                        fillOpacity={1} 
+                        fill="url(#colorValue)" 
+                      />
+                    </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </motion.div>
@@ -336,7 +374,7 @@ function App() {
               <StatCard icon={ShieldCheck} label="Real Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#38bdf8" />
             </div>
 
-            {/* Breakdown Bars - OPTIMIZED: Uses Component */}
+            {/* Breakdown Bars */}
             <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm">
                <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">Budget Breakdown</div>
                <div className="space-y-6">
