@@ -182,7 +182,7 @@ function App() {
     return Object.keys(days)
         .map(dateStr => ({ 
             name: dateStr, 
-            value: days[dateStr],
+            value: days[dateStr].toFixed(2),
             fullDate: parseDate(`${dateStr}/${new Date().getFullYear()}`) // Helper for sorting
         }))
         .sort((a, b) => a.fullDate - b.fullDate);
