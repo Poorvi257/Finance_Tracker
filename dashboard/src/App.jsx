@@ -172,6 +172,91 @@ function App() {
     const top = catArray.length > 0 ? catArray[0].name : 'N/A';
     return { categoryData: catArray, topCategory: top, filteredTotal: total };
   }, [filteredRows]);
+// --- COMMANDER INSIGHT 1: ALLOWANCE EATERS ---
+const allowanceEaters = useMemo(() => {
+  if (!budget || !data || data.length === 0) return [];
+  
+  // Total money allowed for variable spending
+  const variableAllowance = budget.principal - budget.fixedSpent;
+  if (variableAllowance <= 0) return [];
+
+  // Sum up variable spending by category (ignoring time filters, looking at whole month)
+  const totals = data.reduce((acc, row) => {
+    if (row.type !== 'Fixed') {
+      acc[row.category] = (acc[row.category] || 0) + row.amount;
+    }
+    return acc;
+  }, {});
+
+  // Convert to array, calculate percentage of total limit, sort by biggest eaters
+  return Object.keys(totals)
+    .map(name => ({
+      name,
+      spent: totals[name],
+      percentage: Math.min((totals[name] / variableAllowance) * 100, 100)
+    }))
+    .sort((a, b) => b.spent - a.spent)
+    .slice(0, 5); // Keep only the Top 5 worst offenders
+}, [data, budget]);
+
+  // --- COMMANDER INSIGHT 2: PIGGY BANK GROWTH TREND ---
+  const piggyBankHistory = useMemo(() => {
+    if (!budget || !data || data.length === 0) return [];
+    
+    // Extract calendar details from the current month string
+    const [monthStr, yearStr] = currentMonth.split('_');
+    const year = parseInt(yearStr);
+    const monthIndex = new Date(`${monthStr} 1, ${year}`).getMonth();
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    
+    // Simulate the Piggy Bank algorithm historically for the chart
+    const disposableTotal = budget.principal - budget.fixedSpent;
+    let currentDailyLimit = disposableTotal / daysInMonth;
+    let currentDaysRemaining = daysInMonth;
+    let piggyBank = 0;
+
+    // Group variable spends by Day of the Month
+    const dailyMap = {};
+    data.forEach(row => {
+       if (row.type !== 'Fixed') {
+           const dayNum = parseInt(row.date.split('/')[0], 10);
+           dailyMap[dayNum] = (dailyMap[dayNum] || 0) + row.amount;
+       }
+    });
+
+    const history = [];
+    const now = new Date();
+    
+    // FIX: Stop the chart at YESTERDAY if we are looking at the current active month
+    let endDay = daysInMonth;
+    if (now.getMonth() === monthIndex && now.getFullYear() === year) {
+        endDay = now.getDate() - 1; 
+    }
+
+    // Edge case: If today is the 1st of the month, we have no history to chart yet
+    if (endDay < 1) {
+        return [{ day: `1 ${monthStr.substring(0,3)}`, Balance: 0 }];
+    }
+
+    for (let day = 1; day <= endDay; day++) {
+       const spent = dailyMap[day] || 0;
+       currentDaysRemaining--;
+       
+       if (spent < currentDailyLimit) {
+           piggyBank += (currentDailyLimit - spent);
+       } else if (spent > currentDailyLimit) {
+           const overspend = spent - currentDailyLimit;
+           if (currentDaysRemaining > 0) currentDailyLimit -= (overspend / currentDaysRemaining);
+       }
+       
+       history.push({
+           day: `${day} ${monthStr.substring(0,3)}`, 
+           Balance: Number(piggyBank.toFixed(2))
+       });
+    }
+    
+    return history;
+  }, [data, budget, currentMonth]);
 
   const dailyTrendData = useMemo(() => {
     const days = {};
@@ -383,15 +468,86 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               <StatCard icon={Calendar} label="Days Remaining" value={`${budget.daysLeft} Days`} color="#8b5cf6" />
               <StatCard icon={PiggyBank} label="Piggy Bank (Saved)" value={`$${Math.max(0, budget.limits.safetyBuffer).toFixed(2)}`} color="#f59e0b" />
-              <StatCard icon={ShieldCheck} label="Real Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#38bdf8" />
+              <StatCard icon={ShieldCheck} label="Total Remaining" value={`$${(budget.principal - budget.fixedSpent - budget.varSpent).toFixed(2)}`} color="#38bdf8" />
             </div>
 
             <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm">
                <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">Budget Breakdown</div>
                <div className="space-y-6">
                  <BudgetProgressBar label="Fixed Costs (Rent/Bills)" spent={budget.fixedSpent} total={budget.principal} bgClass="bg-blue-500" />
-                 <BudgetProgressBar label="Variable Spend (Fun)" spent={budget.varSpent} total={budget.principal} bgClass="bg-emerald-500" />
+                 <BudgetProgressBar label="Variable Spend" spent={budget.varSpent} total={budget.principal} bgClass="bg-emerald-500" />
                </div>
+               {/* ADVANCED BUDGET INSIGHTS */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+              
+              {/* INSIGHT 1: The Allowance Eaters */}
+              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm">
+                <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase text-xs tracking-wider">
+                  <AlertTriangle size={16} className="text-rose-400" /> The Allowance Eaters (Top 5)
+                </div>
+                <div className="space-y-5">
+                  {allowanceEaters.length > 0 ? allowanceEaters.map(item => (
+                     <div key={item.name}>
+                       <div className="flex justify-between mb-1.5 text-sm font-medium">
+                         <span className="text-slate-300">{item.name}</span>
+                         <span className="text-white">
+                           ${item.spent.toFixed(2)} <span className="text-slate-500 text-xs ml-1">({item.percentage.toFixed(1)}%)</span>
+                         </span>
+                       </div>
+                       <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden">
+                         <div 
+                           className={`h-full rounded-full ${item.percentage > 25 ? 'bg-rose-500' : item.percentage > 15 ? 'bg-amber-500' : 'bg-sky-500'}`} 
+                           style={{ width: `${item.percentage}%` }} 
+                         />
+                       </div>
+                     </div>
+                  )) : (
+                    <div className="text-slate-500 text-sm italic text-center py-4">No variable spending logged yet.</div>
+                  )}
+                </div>
+              </motion.div>
+
+              {/* INSIGHT 2: Piggy Bank Gamification Chart */}
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-2 text-slate-400 font-bold uppercase text-xs tracking-wider">
+                    <PiggyBank size={16} className="text-emerald-400" /> Piggy Bank Growth Trend
+                  </div>
+                  <div className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">
+                    Current: ${piggyBankHistory.length > 0 ? piggyBankHistory[piggyBankHistory.length - 1].Balance.toFixed(2) : '0.00'}
+                  </div>
+                </div>
+                
+                <div className="h-[250px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={piggyBankHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorPiggy" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="day" stroke="#94a3b8" tick={{fontSize: 11}} dy={10} interval="preserveStartEnd" />
+                      <YAxis stroke="#94a3b8" tick={{fontSize: 11}} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#10b981', borderRadius: '8px', color: '#fff' }} 
+                        itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="Balance" 
+                        stroke="#10b981" 
+                        strokeWidth={3} 
+                        fillOpacity={1} 
+                        fill="url(#colorPiggy)" 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </motion.div>
+
+            </div>
             </div>
           </motion.div>
         )}
