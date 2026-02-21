@@ -72,93 +72,109 @@ async function getBudgetSheet() {
 
 // --- CORE LOGIC ENGINE ---
 async function calculateBudgetStats() {
-    const budgetSheet = await getBudgetSheet();
-    const budgetRows = await budgetSheet.getRows();
-    
-    if (budgetRows.length === 0) return null;
+  const budgetSheet = await getBudgetSheet();
+  const budgetRows = await budgetSheet.getRows();
+  
+  if (budgetRows.length === 0) return null;
 
-    const row = budgetRows[0];
-    const principal = parseFloat(row.get('Principal'));
-    const fixedSpent = parseFloat(row.get('Fixed_Spent')) || 0;
-    const varSpent = parseFloat(row.get('Variable_Spent')) || 0;
-    const startDateStr = row.get('Start_Date');
-    const endDateStr = row.get('End_Date');
+  const row = budgetRows[0];
+  const principal = parseFloat(row.get('Principal'));
+  const fixedSpent = parseFloat(row.get('Fixed_Spent')) || 0;
+  const varSpent = parseFloat(row.get('Variable_Spent')) || 0;
+  const startDateStr = row.get('Start_Date');
+  const endDateStr = row.get('End_Date');
 
-    // 1. Date Math
-    const [d1, m1, y1] = startDateStr.split('-').map(Number);
-    const [d2, m2, y2] = endDateStr.split('-').map(Number);
-    const start = new Date(y1, m1 - 1, d1);
-    const end = new Date(y2, m2 - 1, d2);
-    const now = getLocalNow();
-    
-    const diffTime = end - now;
-    const daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 1);
-    const totalDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-    
-    // 2. Base Calculation
-    const disposableTotal = principal - fixedSpent;
-    const baseDailyLimit = disposableTotal / totalDuration; 
+  // 1. Date Math
+  const [d1, m1, y1] = startDateStr.split('-').map(Number);
+  const [d2, m2, y2] = endDateStr.split('-').map(Number);
+  const start = new Date(y1, m1 - 1, d1);
+  const end = new Date(y2, m2 - 1, d2);
+  const now = getLocalNow();
+  
+  // FIX: Set the end time to the very end of the final day (23:59:59)
+  const inclusiveEnd = new Date(y2, m2 - 1, d2, 23, 59, 59, 999);
+  const diffTime = inclusiveEnd - now;
+  
+  const daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 1);
+  const totalDuration = Math.ceil((inclusiveEnd - start) / (1000 * 60 * 60 * 24));
+  
+  // 2. Fetch all daily spends
+  const monthSheetName = getMonthSheetName();
+  const monthSheet = doc.sheetsByTitle[monthSheetName];
+  const dailyMap = {};
+  let spentToday = 0;
+  const todayStr = getTodayDate();
 
-    // 3. Piggy Bank Logic
-    const monthSheetName = getMonthSheetName();
-    const monthSheet = doc.sheetsByTitle[monthSheetName];
-    let piggyBank = 0;
-    let spentToday = 0;
-    
-    if (monthSheet) {
-        const rows = await monthSheet.getRows();
-        const dailyMap = {};
-        const todayStr = getTodayDate();
+  if (monthSheet) {
+      const rows = await monthSheet.getRows();
+      rows.forEach(r => {
+          const date = r.get('Date');
+          const amt = parseFloat(r.get('Amount')) || 0;
+          const type = r.get('Type');
+          // We only count Variable spending against the daily limit
+          if (type === 'Variable' || !type) {
+              dailyMap[date] = (dailyMap[date] || 0) + amt;
+          }
+      });
+      spentToday = dailyMap[todayStr] || 0;
+  }
 
-        rows.forEach(r => {
-            const date = r.get('Date');
-            const amt = parseFloat(r.get('Amount')) || 0;
-            const type = r.get('Type');
-            if (type === 'Variable' || !type) {
-                dailyMap[date] = (dailyMap[date] || 0) + amt;
-            }
-        });
+  // 3. Simulate the Budget Day-by-Day (Piggy Bank Logic)
+  const disposableTotal = principal - fixedSpent;
+  let currentDailyLimit = disposableTotal / totalDuration; 
+  let piggyBank = 0;
+  let currentDaysRemaining = totalDuration;
 
-        spentToday = dailyMap[todayStr] || 0;
+  const checkDate = new Date(start);
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(23, 59, 59, 999);
 
-        const checkDate = new Date(start);
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        yesterday.setHours(23, 59, 59, 999);
+  // Loop from the start date up to yesterday
+  while (checkDate <= yesterday) {
+      const d = String(checkDate.getDate()).padStart(2, '0');
+      const m = String(checkDate.getMonth() + 1).padStart(2, '0');
+      const y = checkDate.getFullYear();
+      const dateKey = `${d}/${m}/${y}`;
 
-        while (checkDate <= yesterday) {
-            const d = String(checkDate.getDate()).padStart(2, '0');
-            const m = String(checkDate.getMonth() + 1).padStart(2, '0');
-            const y = checkDate.getFullYear();
-            const dateKey = `${d}/${m}/${y}`;
+      const spentThatDay = dailyMap[dateKey] || 0;
+      currentDaysRemaining--; // One less day remaining for the rest of the period
 
-            const spentThatDay = dailyMap[dateKey] || 0;
-            if (spentThatDay < baseDailyLimit) {
-                piggyBank += (baseDailyLimit - spentThatDay);
-            }
-            checkDate.setDate(checkDate.getDate() + 1);
-        }
-    }
+      // Reward: Underspending
+      if (spentThatDay < currentDailyLimit) {
+          piggyBank += (currentDailyLimit - spentThatDay);
+          // Notice: currentDailyLimit stays exactly the same!
+      } 
+      // Punishment: Overspending
+      else if (spentThatDay > currentDailyLimit) {
+          const overspend = spentThatDay - currentDailyLimit;
+          // Distribute the overspend across the remaining days to lower the limit
+          if (currentDaysRemaining > 0) {
+              currentDailyLimit -= (overspend / currentDaysRemaining);
+          }
+          // Notice: piggyBank is untouched!
+      }
 
-    // 4. Real Time Limits
-    const totalRemaining = disposableTotal - varSpent;
-    const rawLimit = totalRemaining / daysLeft;
-    const realDailyLimit = Math.max(0, Math.min(baseDailyLimit, rawLimit));
-    const leftToday = realDailyLimit - spentToday;
+      checkDate.setDate(checkDate.getDate() + 1);
+  }
 
-    return {
-        row,
-        principal,
-        fixedSpent,
-        varSpent,
-        daysLeft,
-        piggyBank,
-        realDailyLimit,
-        spentToday,
-        leftToday
-    };
+  // 4. Finalizing Today's Limits
+  // Prevent the daily limit from dropping below zero if horribly overspent
+  const realDailyLimit = Math.max(0, currentDailyLimit);
+  const leftToday = realDailyLimit - spentToday;
+
+  return {
+      row,
+      principal,
+      fixedSpent,
+      varSpent,
+      daysLeft,
+      piggyBank,
+      realDailyLimit,
+      spentToday,
+      leftToday
+  };
 }
-
 // --- API ENDPOINTS ---
 
 app.get('/api/data', async (req, res) => {
