@@ -301,7 +301,17 @@ function App() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={categoryData} layout="horizontal">
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                      <XAxis dataKey="name" stroke="#94a3b8" tick={{fontSize: 12}} dy={10} />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="#94a3b8" 
+                        interval={0} 
+                        angle={-45} 
+                        textAnchor="end"
+                        tick={{fontSize: 11}} 
+                        dx={-5}  // Pulls text slightly left so the end aligns with the tick
+                        dy={10}  // Pushes text down away from the axis line
+                        height={70} // Gives the tilted text plenty of room
+                      />
                       <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
                       <Tooltip 
                         cursor={{fill: '#334155', opacity: 0.4}}
