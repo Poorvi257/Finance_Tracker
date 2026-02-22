@@ -4,6 +4,7 @@ const { JWT } = require('google-auth-library');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const cron = require('node-cron');
 
 // --- CONFIGURATION ---
 const TIMEZONE_OFFSET = 8; // UTC+8 (Singapore)
@@ -284,6 +285,18 @@ bot.command('budget', async (ctx) => {
   } catch (e) { console.error(e); ctx.reply('❌ System Error.'); }
 });
 
+bot.command(['help', 'commands'], (ctx) => {
+  const helpMsg = `*⚡ Available Commands:*
+/show - 📊 View your budget dashboard
+/report - 📜 See your last 10 transactions
+/resync - 🔄 Fix math if you manually edited the sheet
+/budget - 💰 Set a new budget (Format: \`/budget Name DD-MM-YYYY DD-MM-YYYY Amount\`)
+/clearbudget - 🗑️ Clear the active budget
+/help - ℹ️ Show this menu`;
+
+  ctx.reply(helpMsg, { parse_mode: 'Markdown' });
+});
+
 bot.command('resync', async (ctx) => {
   try {
     const monthSheetName = getMonthSheetName();
@@ -390,6 +403,47 @@ bot.on('text', async (ctx) => {
     } catch (e) { console.error("Budget calc error", e); }
     ctx.reply(`✅ Logged: ${item} ($${amount})${budgetMsg}`, { parse_mode: 'Markdown' });
   } catch (e) { console.error(e); ctx.reply('❌ Error saving data.'); }
+});
+
+// --- PROACTIVE MORNING GREETING ---
+cron.schedule('0 8 * * *', () => {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) return; // Failsafe if ID isn't set
+
+  const greetings = [
+    "☀️ Good morning baby. I hope you slept well muaahhh. 💋",
+    "🥱 Wake up baby. I need my favorite human. 🧸",
+    "🥰 Hi shona. I just know you look adorable right now. ✨",
+    "🌅 Good morning. I hope today surprises you in a nice way. 🎁",
+    "😜 Wake up gandi bacchi. Try not to miss me so much. 💖",
+    "🌞 Morning my baby. Smile a little extra today. 😊",
+    "💭 Hi. Did you dream about me? 🌙",
+    "🌼 Good morning choti choti. Be your amazing self today. 💫",
+    "🌻 Wake up. I better get at least one smile from you today. 😄",
+    "🎀 Hi my beautiful baby girl. I will hug you super soon okay? 🤗",
+    "☕ Good morning. I hope your coffee behaves today. 🪄",
+    "🐣 Wake up baby. Don’t forget you’re cute for no reason. 🥺",
+    "👋 Hi choti bacchi. I’m already missing you a bit. ❤️",
+    "🌤️ Good morning. Go do your thing. I’ll admire from here. 👀",
+    "📱 Wake up shona. I expect updates. 💌",
+    "🤭 Morning. Try not to look too good today. 💅",
+    "🌷 Hi my baby. Someone thinks you’re very special. 💝",
+    "☀️ Good morning gandi bacchi. Stay adorable, that’s your only task. 🐰",
+    "🦋 Wake up. I hope something random makes you think of me. 💭",
+    "🐒 Hi shoni. Just checking if my person is awake yet. 💕",
+    "🌅 Good morning choti choti. Missing you and Teh. ☕️",
+    "🌻 Wake up baby. I like starting my day thinking about you. 🥰",
+    "🌟 Morning my beautiful baby girl. Go shine quietly. 🤫",
+    "💕 Hi mou mou. You better have a good day ;* 😘",
+    "🎈 Good morning Bub. Have an amazing day, cheering you always. 🎉"
+  ];
+  const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+  
+  // Send the message proactively
+  bot.telegram.sendMessage(chatId, `🌅 *${randomGreeting}*`, { parse_mode: 'Markdown' })
+    .catch(err => console.error("Failed to send morning message:", err));
+}, {
+  timezone: "Asia/Singapore" // Adjust this if your client is in a different timezone!
 });
 
 const PORT = process.env.PORT || 3000;
