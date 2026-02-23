@@ -79,18 +79,23 @@ const BudgetGauge = ({ limit, spent, left, isWarning }) => {
           <Pie
             data={gaugeData} cx="50%" cy="100%"
             startAngle={180} endAngle={0}
-            innerRadius="75%" outerRadius="100%"
+            innerRadius="80%" outerRadius="100%" // <-- Thinned the arc for more space
             paddingAngle={2} dataKey="value" stroke="none"
           >
             {gaugeData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
           </Pie>
         </PieChart>
       </ResponsiveContainer>
-      <div className="absolute bottom-8 text-center w-full px-4">
+      
+      {/* Moved from bottom-8 to bottom-4 to utilize the widest part of the arch, added z-10 */}
+      <div className="absolute bottom-4 text-center w-full px-4 z-10">
         <div className="text-xs text-slate-400 uppercase font-bold mb-1">Available Today</div>
-        <div className={`text-4xl lg:text-5xl font-extrabold ${left < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+        
+        {/* Slightly reduced font size from 4xl/5xl to 3xl/4xl */}
+        <div className={`text-3xl lg:text-4xl font-extrabold ${left < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
           ${left.toFixed(2)}
         </div>
+        
         <div className="text-sm text-slate-400 mt-2">
           Spent: <span className="text-white font-bold">${spent.toFixed(2)}</span> / ${limit.toFixed(2)}
         </div>
