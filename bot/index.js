@@ -240,6 +240,57 @@ app.get('/api/months', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// --- EXTERNAL CRON TRIGGER FOR GREETING ---
+app.get('/api/cron/greet', (req, res) => {
+  // Security check: Only allow requests with the correct secret password
+  const secret = req.query.secret;
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) {
+    return res.status(500).json({ error: "No TELEGRAM_CHAT_ID configured." });
+  }
+
+  const greetings = [
+    "☀️ Good morning baby. I hope you slept well muaahhh. 💋",
+    "🥱 Wake up baby. I need my favorite human. 🧸",
+    "🥰 Hi shona. I just know you look adorable right now. ✨",
+    "🌅 Good morning. I hope today surprises you in a nice way. 🎁",
+    "😜 Wake up gandi bacchi. Try not to miss me so much. 💖",
+    "🌞 Morning my baby. Smile a little extra today. 😊",
+    "💭 Hi. Did you dream about me? 🌙",
+    "🌼 Good morning choti choti. Be your amazing self today. 💫",
+    "🌻 Wake up. I better get at least one smile from you today. 😄",
+    "🎀 Hi my beautiful baby girl. I will hug you super soon okay? 🤗",
+    "☕ Good morning. I hope your coffee behaves today. 🪄",
+    "🐣 Wake up baby. Don’t forget you’re cute for no reason. 🥺",
+    "👋 Hi choti bacchi. I’m already missing you a bit. ❤️",
+    "🌤️ Good morning. Go do your thing. I’ll admire from here. 👀",
+    "📱 Wake up shona. I expect updates. 💌",
+    "🤭 Morning. Try not to look too good today. 💅",
+    "🌷 Hi my baby. Someone thinks you’re very special. 💝",
+    "☀️ Good morning gandi bacchi. Stay adorable, that’s your only task. 🐰",
+    "🦋 Wake up. I hope something random makes you think of me. 💭",
+    "🐒 Hi shoni. Just checking if my person is awake yet. 💕",
+    "🌅 Good morning choti choti. Missing you and Teh. ☕️",
+    "🌻 Wake up baby. I like starting my day thinking about you. 🥰",
+    "🌟 Morning my beautiful baby girl. Go shine quietly. 🤫",
+    "💕 Hi mou mou. You better have a good day ;* 😘",
+    "🎈 Good morning Bub. Have an amazing day, cheering you always. 🎉"
+  ];
+  const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+  
+  // Send the message proactively
+  bot.telegram.sendMessage(chatId, `🌅 *${randomGreeting}*`, { parse_mode: 'Markdown' })
+    .then(() => res.status(200).json({ success: true, message: "Greeting sent!" }))
+    .catch(err => {
+      console.error("Failed to send morning message:", err);
+      res.status(500).json({ error: "Failed to send Telegram message" });
+    });
+});
+
 // --- COMMANDS & LOGGING ---
 
 bot.start((ctx) => ctx.reply('💰 *FinancePulse V7 Ready (Clean Mode)*\n\n/budget Name Start End Amount\n/show - Full Dashboard\n/resync - Fix totals\n/report - Last 10 txns', { parse_mode: 'Markdown' }));
@@ -405,46 +456,6 @@ bot.on('text', async (ctx) => {
   } catch (e) { console.error(e); ctx.reply('❌ Error saving data.'); }
 });
 
-// --- PROACTIVE MORNING GREETING ---
-cron.schedule('0 8 * * *', () => {
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!chatId) return; // Failsafe if ID isn't set
-
-  const greetings = [
-    "☀️ Good morning baby. I hope you slept well muaahhh. 💋",
-    "🥱 Wake up baby. I need my favorite human. 🧸",
-    "🥰 Hi shona. I just know you look adorable right now. ✨",
-    "🌅 Good morning. I hope today surprises you in a nice way. 🎁",
-    "😜 Wake up gandi bacchi. Try not to miss me so much. 💖",
-    "🌞 Morning my baby. Smile a little extra today. 😊",
-    "💭 Hi. Did you dream about me? 🌙",
-    "🌼 Good morning choti choti. Be your amazing self today. 💫",
-    "🌻 Wake up. I better get at least one smile from you today. 😄",
-    "🎀 Hi my beautiful baby girl. I will hug you super soon okay? 🤗",
-    "☕ Good morning. I hope your coffee behaves today. 🪄",
-    "🐣 Wake up baby. Don’t forget you’re cute for no reason. 🥺",
-    "👋 Hi choti bacchi. I’m already missing you a bit. ❤️",
-    "🌤️ Good morning. Go do your thing. I’ll admire from here. 👀",
-    "📱 Wake up shona. I expect updates. 💌",
-    "🤭 Morning. Try not to look too good today. 💅",
-    "🌷 Hi my baby. Someone thinks you’re very special. 💝",
-    "☀️ Good morning gandi bacchi. Stay adorable, that’s your only task. 🐰",
-    "🦋 Wake up. I hope something random makes you think of me. 💭",
-    "🐒 Hi shoni. Just checking if my person is awake yet. 💕",
-    "🌅 Good morning choti choti. Missing you and Teh. ☕️",
-    "🌻 Wake up baby. I like starting my day thinking about you. 🥰",
-    "🌟 Morning my beautiful baby girl. Go shine quietly. 🤫",
-    "💕 Hi mou mou. You better have a good day ;* 😘",
-    "🎈 Good morning Bub. Have an amazing day, cheering you always. 🎉"
-  ];
-  const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-  
-  // Send the message proactively
-  bot.telegram.sendMessage(chatId, `🌅 *${randomGreeting}*`, { parse_mode: 'Markdown' })
-    .catch(err => console.error("Failed to send morning message:", err));
-}, {
-  timezone: "Asia/Singapore" // Adjust this if your client is in a different timezone!
-});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

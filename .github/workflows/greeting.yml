@@ -1,0 +1,17 @@
+name: Daily Morning Greeting
+
+on:
+  schedule:
+    # 00:00 UTC is exactly 08:00 AM in Singapore (UTC+8)
+    - cron: '0 0 * * *'
+  # This line allows you to trigger it manually from the GitHub website to test it!
+  workflow_dispatch: 
+
+jobs:
+  send-greeting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the greeting endpoint
+        # We use 'curl' to visit the URL just like a web browser would
+        run: |
+          curl -f -X GET "${{ secrets.SERVER_URL }}/api/cron/greet?secret=${{ secrets.CRON_SECRET }}"
