@@ -76,9 +76,11 @@ async function calculateBudgetStats() {
   const budgetSheet = await getBudgetSheet();
   const budgetRows = await budgetSheet.getRows();
   
-  if (budgetRows.length === 0) return null;
+  // FIX: Find the currently active budget instead of just grabbing the first row!
+  const activeRow = budgetRows.find(r => r.get('Status') === 'Active');
+  if (!activeRow) return null;
 
-  const row = budgetRows[0];
+  const row = activeRow;
   const principal = parseFloat(row.get('Principal'));
   const fixedSpent = parseFloat(row.get('Fixed_Spent')) || 0;
   const varSpent = parseFloat(row.get('Variable_Spent')) || 0;
@@ -217,6 +219,8 @@ app.get('/api/status', async (req, res) => {
 
       res.json({
           active: true,
+          startDate: stats.row.get('Start_Date'), // <-- ADD THIS
+          endDate: stats.row.get('End_Date'),
           principal: stats.principal,
           fixedSpent: stats.fixedSpent,
           varSpent: stats.varSpent,
@@ -324,7 +328,17 @@ bot.command('budget', async (ctx) => {
 
   try {
     const sheet = await getBudgetSheet();
-    await sheet.clearRows(); 
+    const rows = await sheet.getRows();
+    
+    // Mark ALL existing budgets as 'Inactive'
+    for (let r of rows) {
+        if (r.get('Status') === 'Active') {
+            r.set('Status', 'Inactive');
+            await r.save();
+        }
+    }
+    
+    // Add the new budget as 'Active'
     await sheet.addRow({ Name: name, Start_Date: startStr, End_Date: endStr, Principal: amount, Fixed_Spent: 0, Variable_Spent: 0, Status: 'Active' });
     
     const inclusiveEnd = new Date(y2, m2 - 1, d2, 23, 59, 59);
@@ -350,24 +364,44 @@ bot.command(['help', 'commands'], (ctx) => {
 
 bot.command('resync', async (ctx) => {
   try {
+    const budgetSheet = await getBudgetSheet();
+    const budgetRows = await budgetSheet.getRows();
+    const activeRow = budgetRows.find(r => r.get('Status') === 'Active');
+    if (!activeRow) return ctx.reply('⚠️ No active budget config found.');
+
+    // Parse active budget dates
+    const [d1, m1, y1] = activeRow.get('Start_Date').split('-').map(Number);
+    const [d2, m2, y2] = activeRow.get('End_Date').split('-').map(Number);
+    const startDate = new Date(y1, m1 - 1, d1);
+    const endDate = new Date(y2, m2 - 1, d2, 23, 59, 59);
+
     const monthSheetName = getMonthSheetName();
     await doc.loadInfo();
     const monthSheet = doc.sheetsByTitle[monthSheetName];
     if (!monthSheet) return ctx.reply('⚠️ No data found for this month.');
+    
     const rows = await monthSheet.getRows();
     let fixedTotal = 0; let varTotal = 0;
+    
     rows.forEach(row => {
-        const amt = parseFloat(row.get('Amount')) || 0;
-        const type = row.get('Type');
-        if (type === 'Fixed') fixedTotal += amt; else varTotal += amt;
+        const dateStr = row.get('Date');
+        if (!dateStr) return;
+        const [rd, rm, ry] = dateStr.split('/').map(Number);
+        const rowDate = new Date(ry, rm - 1, rd);
+
+        // FIX: Only count transactions that fall inside the budget window!
+        if (rowDate >= startDate && rowDate <= endDate) {
+            const amt = parseFloat(row.get('Amount')) || 0;
+            const type = row.get('Type');
+            if (type === 'Fixed') fixedTotal += amt; else varTotal += amt;
+        }
     });
-    const budgetSheet = await getBudgetSheet();
-    const budgetRows = await budgetSheet.getRows();
-    if (budgetRows.length === 0) return ctx.reply('⚠️ No active budget config found.');
-    const row = budgetRows[0];
-    row.set('Fixed_Spent', fixedTotal); row.set('Variable_Spent', varTotal);
-    await row.save();
-    ctx.reply(`🔄 *Resync Complete*\nFixed: $${fixedTotal}\nVariable: $${varTotal}`, { parse_mode: 'Markdown' });
+
+    activeRow.set('Fixed_Spent', fixedTotal); 
+    activeRow.set('Variable_Spent', varTotal);
+    await activeRow.save();
+    
+    ctx.reply(`🔄 *Resync Complete for ${activeRow.get('Name')}*\nFixed: $${fixedTotal}\nVariable: $${varTotal}`, { parse_mode: 'Markdown' });
   } catch (e) { console.error(e); ctx.reply('❌ Resync failed.'); }
 });
 
@@ -430,14 +464,22 @@ bot.on('text', async (ctx) => {
     try {
         const budgetSheet = await getBudgetSheet();
         const budgetRows = await budgetSheet.getRows();
-        if (budgetRows.length > 0) {
-            const row = budgetRows[0];
-            let fixedSpent = parseFloat(row.get('Fixed_Spent')) || 0;
-            let varSpent = parseFloat(row.get('Variable_Spent')) || 0; 
+        
+        // FIX: Find the 'Active' budget instead of grabbing row 0!
+        const activeRow = budgetRows.find(r => r.get('Status') === 'Active');
+        
+        if (activeRow) {
+            let fixedSpent = parseFloat(activeRow.get('Fixed_Spent')) || 0;
+            let varSpent = parseFloat(activeRow.get('Variable_Spent')) || 0; 
             
-            if (type === 'Fixed') { fixedSpent += amount; row.set('Fixed_Spent', fixedSpent); } 
-            else { varSpent += amount; row.set('Variable_Spent', varSpent); }
-            await row.save(); 
+            if (type === 'Fixed') { 
+                fixedSpent += amount; 
+                activeRow.set('Fixed_Spent', fixedSpent); 
+            } else { 
+                varSpent += amount; 
+                activeRow.set('Variable_Spent', varSpent); 
+            }
+            await activeRow.save(); 
             
             const stats = await calculateBudgetStats();
             if (stats) {

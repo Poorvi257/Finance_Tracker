@@ -151,8 +151,29 @@ function App() {
 
   const filteredRows = useMemo(() => {
     const now = new Date(); now.setHours(0,0,0,0);
+
+    // Extract Active Budget Dates bounds
+    let bStart = null; let bEnd = null; let budgetMonthStr = null;
+    
+    if (budget?.active && budget.startDate && budget.endDate) {
+        const [d1, m1, y1] = budget.startDate.split('-').map(Number);
+        bStart = new Date(y1, m1 - 1, d1);
+        
+        const [d2, m2, y2] = budget.endDate.split('-').map(Number);
+        bEnd = new Date(y2, m2 - 1, d2, 23, 59, 59);
+        
+        // Figure out what month the Active Budget belongs to (e.g., "March_2026")
+        budgetMonthStr = `${bStart.toLocaleString('default', { month: 'long' })}_${bStart.getFullYear()}`;
+    }
+
     return data.filter(row => {
       const rowDate = parseDate(row.date); rowDate.setHours(0,0,0,0);
+
+      // STRICT FILTER: Only hide transactions if we are actively viewing the current budget's month
+      if (bStart && bEnd && currentMonth === budgetMonthStr) {
+          if (rowDate < bStart || rowDate > bEnd) return false;
+      }
+
       switch(timeFilter) {
         case 'daily': return rowDate.getTime() === now.getTime();
         case 'weekly':
@@ -161,7 +182,7 @@ function App() {
         default: return true;
       }
     });
-  }, [data, timeFilter]);
+  }, [data, timeFilter, budget, currentMonth]);
 
   const { categoryData, topCategory, filteredTotal } = useMemo(() => {
     const total = filteredRows.reduce((sum, r) => sum + r.amount, 0);
